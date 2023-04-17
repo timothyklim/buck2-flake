@@ -30,25 +30,36 @@
         let
           pkgs = import nixpkgs {
             inherit system;
-            overlays = [
-              fenix.overlays.default
-            ] ++ [
-              (self: super: rec {
-                naersk = pkgs.callPackage naersk-src { inherit (pkgs.fenix.default) cargo rustc; };
-              })
-            ];
+            overlays = [ fenix.overlays.default ];
           };
+          patched_src = with pkgs; stdenv.mkDerivation {
+            inherit src;
+            name = "src";
+            patches = [ ./cargo-lock.patch ];
+            installPhase = "cp -r . $out";
+          };
+          rust_toolchain = pkgs.fenix.toolchainOf {
+            channel = "nightly";
+            date = "2023-01-24";
+            # sha256 = pkgs.lib.fakeSha256;
+            sha256 = "sha256-I+5ZBqZ2tp/zm13naiIpkrEX6TvXVOlZmjjCVdABEIY";
+          };
+          naersk = pkgs.callPackage naersk-src { inherit (rust_toolchain) cargo rustc; };
           buck2 = with pkgs; naersk.buildPackage {
-            src = stdenv.mkDerivation {
-              inherit src;
-              name = "src";
-              patches = [ ./cargo-lock.patch ];
-              installPhase = ''
-                cp -r . $out
-              '';
-            };
             name = "buck2";
-            cargoBuildOptions = opts: opts ++ [ "-p=app/buck2" ];
+            src = patched_src;
+            cargoBuildOptions = opts: opts ++ [ "--manifest-path=app/buck2/Cargo.toml" ];
+            singleStep = true;
+            gitSubmodules = true;
+            gitAllRefs = true;
+
+            nativeBuildInputs = [ protobuf pkg-config ] ++ lib.optionals stdenv.isDarwin [ fixDarwinDylibNames ];
+            buildInputs = [ openssl sqlite ];
+
+            BUCK2_BUILD_PROTOC = "${protobuf}/bin/protoc";
+            BUCK2_BUILD_PROTOC_INCLUDE = "${protobuf}/include";
+
+            doCheck = false;
           };
           buck2-app = flake-utils.lib.mkApp { drv = buck2; };
           derivation = { inherit buck2; };
