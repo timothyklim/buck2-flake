@@ -48,6 +48,7 @@
           buck2 = with pkgs; naersk.buildPackage {
             name = "buck2";
             src = patched_src;
+            stdenv = pkgs.llvmPackages_15.stdenv;
             cargoBuildOptions = opts: opts ++ [ "--manifest-path=app/buck2/Cargo.toml" ];
             singleStep = true;
             gitSubmodules = true;
